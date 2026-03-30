@@ -1,0 +1,82 @@
+# Research History
+
+> 방법론의 변경 이력과 연구 과정에서의 주요 의사결정을 기록합니다.
+
+---
+
+## 2026-03-29 ~ 03-30: 초기 연구 설계
+
+### Phase 1: EEG 전처리 다양성 탐색
+- 기존 EEG 파운데이션 모델들(EEG-VJEPA, LaBraM, NeuroGPT, EEGPT, DeWave)의 전처리 방식 조사
+- **핵심 발견**: EEG 데이터의 이질성(채널, 샘플링 레이트, 참조 전극, 노이즈, 세그멘테이션)이 파운데이션 모델의 근본적 병목
+
+### Phase 2: JEPA 문헌 서베이
+- 분석한 논문: Brain-JEPA(fMRI), EEG-VJEPA, S-JEPA, HEAR, LUNA, SPEED
+- S-JEPA: 공간 블록 마스킹 도입 (최초 EEG-JEPA)
+- HEAR: 3D 좌표 기반 전극 인코딩
+- LUNA: Learned-query cross-attention으로 채널 통합 (채널 수 무관)
+
+### Phase 3: 5축 분류 체계 수립
+- EEG 파운데이션 모델 분류 체계 정립:
+  1. 입력 표현 (비디오/텍스트/이산 토큰/독립 센서)
+  2. 토폴로지 불변 전략 (교집합/ID 임베딩/좌표/learned-query)
+  3. 학습 패러다임 (MAE/JEPA/autoregressive)
+  4. 신호 정제 수준 (최소/주파수 분해/무거운 파이프라인)
+  5. 다운스트림 태스크 (분류/텍스트 생성/비디오 생성)
+- "EEG-JEPA" 연구 비전 확립: 3D 좌표 + 주파수 분해 → JEPA → World Model
+
+### Phase 4: 경쟁 논문 대응
+- **LuMamba, Laya** (2026.03) 발견 — 이미 "채널 통합 + JEPA" 구현
+- 포기 대신 3가지 차별화 전략 수립:
+  1. DELTA 스타일 주파수 대역 분해 추가
+  2. 시공간 동시 마스킹 (temporal + spatial)
+  3. EEG-to-Video World Model (장기 목표)
+
+### Phase 5: 아키텍처 최종 결정
+- **VQ-JEPA 아이디어 검토**: DELTA의 RVQ + JEPA 결합
+  - 장점: 노이즈 필터링, 계층적 주파수 학습, LLM/Diffusion 호환
+  - 문제: SIGReg(연속적 가우시안)과 RVQ(이산적 코드북)가 수학적으로 비호환
+- **LeWM 발견**: LeCun팀의 최신 World Model, SIGReg 기반, EMA 완전 제거
+- **최종 결정: Track A (LeWM 순정)**
+  - RVQ 포기, SIGReg 채택 (학습 안정성 + 빠른 논문화)
+  - Channel Mixer + Spatiotemporal Masking 결합이 핵심 기여
+- **전처리 표준화 5요소 확정**: 채널, 샘플링 레이트, 참조 전극, 노이즈, 세그멘테이션
+- **윈도우 크기 2초로 확정**: Laya/LuMamba와 공정 비교를 위해
+- **방법론 3단계 구조 확정**: EEG 표준화 → LeWM 사전학습 → 다운스트림 평가
+
+---
+
+## 2026-03-31: 데이터 파이프라인 설계
+
+### Phase 6: 데이터 파이프라인 설계 논의
+- **REVE(4.4TB) + TUH(1.6TB) 결합** 결정 — "이질적 데이터 통합"이라는 연구 가설 증명에 최적
+- TUH는 라이선스 제약 → 로컬 전처리 후 HuggingFace Private 업로드 전략 채택
+- **LitData 도입** — 500GB SSD로 6TB 스트리밍 가능 (Prefetching 기반)
+- 스트리밍 엔진 검토: 단순 HF streaming은 GPU Starvation 유발 → LitData로 해결
+
+### Phase 7: 데이터 파이프라인 기술적 이슈 해결
+- **채널 Alias 문제**: REVE Position Bank (543개 전극) 활용으로 해결. 드롭 비율 로깅 추가
+- **CAR 적용 시점**: 패딩과의 상호작용 문제 발견 → Dataset 내 적용(패딩 전)으로 확정
+- **가변 채널 배칭**: 채널 상한+서브샘플링, Bucket Sampling 등 검토 후 모두 기각
+- **최종 결론**: "채널을 인위적으로 조작하지 않는다" — padding_mask 기반으로 원본 그대로 처리
+- **REVE 채널 분포 검증**: 보고서의 "고밀도 54.2%" 주장이 실제로는 14.7%임을 확인 (실제 82%가 19~22ch)
+
+### Channel Mixer 계보 확인
+- LUNA (2025.10): Learned-query Cross-attention 최초 제안
+- Laya (2026.03): LUNA의 Channel Mixer를 LeJEPA에 결합
+- LuMamba (2026.03): LUNA의 Channel Mixer를 Mamba에 결합
+- 우리의 추가 기여: padding_mask 지원 (기존 논문들은 동일 채널 수 데이터셋 내 학습만 수행)
+
+---
+
+## 변경 로그 (Method Changes)
+
+| 날짜 | 변경 내용 | 이유 | 영향 |
+|---|---|---|---|
+| 2026-03-30 | RVQ(VQ-JEPA) 기각 → SIGReg(LeWM) 채택 | SIGReg와 RVQ의 수학적 비호환 | 잠재 공간이 연속적으로 고정 |
+| 2026-03-30 | 윈도우 크기 2초 확정 | Laya/LuMamba baseline과 공정 비교 | 전처리 파이프라인 확정 |
+| 2026-03-30 | 방법론 3단계 구조 확정 | 논문 구조와 매핑 | research_method.md v1.0 |
+| 2026-03-31 | 채널 상한/서브샘플링 기각 | 모델의 Topology-Invariant 주장과 모순 | 원본 채널 그대로 유지 |
+| 2026-03-31 | CAR 적용 시점: Dataset 내 (패딩 전) | 패딩 채널이 CAR 평균 왜곡 방지 | Mask-aware 로직 불필요 |
+| 2026-03-31 | 데이터 파이프라인 v1.0 확정 | REVE+TUH 혼합, LitData, padding_mask | data_pipeline.md 신규 |
+| 2026-03-31 | research_method.md v1.1 업데이트 | 데이터 파이프라인 반영 | 전처리 섹션 갱신 |

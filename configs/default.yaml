@@ -1,0 +1,61 @@
+# EEG-WM-JEPA Default Configuration
+
+# Stage 1: Preprocessing
+preprocessing:
+  target_srate: 200          # Hz
+  bandpass_low: 0.5          # Hz
+  bandpass_high: 75.0        # Hz
+  window_sec: 2.0            # seconds
+  window_samples: 400        # target_srate * window_sec
+
+# Stage 2: Model Architecture
+model:
+  # Patch Embedder
+  patch_size: 40             # 200ms at 200Hz (400 samples / 40 = 10 patches)
+  patch_embed_dim: 64        # E: per-channel patch embedding dim
+
+  # Channel Mixer
+  num_queries: 8             # Nq: learned query count
+  mixer_dim: 256             # D: output dimension after mixing
+  fourier_features: 32       # Fourier encoding dim for 3D coords
+  num_heads_mixer: 4         # cross-attention heads
+
+  # Transformer Encoder
+  encoder_dim: 256           # must match mixer_dim
+  encoder_depth: 6           # number of transformer layers
+  encoder_heads: 4           # attention heads
+  dropout: 0.1
+
+  # Predictor
+  predictor_dim: 256
+  predictor_depth: 3
+  predictor_heads: 4
+
+  # Projector (MLP)
+  projector_hidden: 1024     # Dup >> D
+  projector_out: 128         # Dproj < D
+
+# Stage 2: Training
+training:
+  # Masking
+  mask_ratio: 0.6            # 60%
+  mask_block_min_sec: 0.5    # minimum block length in seconds
+  mask_block_max_sec: 1.0    # maximum block length in seconds
+
+  # Loss weights
+  lambda_sigreg: 1.0
+  lambda_query: 0.1
+
+  # SIGReg
+  sigreg_num_projections: 64  # M: random projection directions
+
+  # Optimizer
+  lr: 1.0e-4
+  weight_decay: 0.05
+  batch_size: 64
+  epochs: 100
+
+# Stage 3: Downstream
+downstream:
+  freeze_encoder: true       # linear probing by default
+  num_classes: 2             # TUAB: normal/abnormal
