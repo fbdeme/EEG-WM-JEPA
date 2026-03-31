@@ -46,10 +46,10 @@
 
 - [ ] Linear Probing 평가 파이프라인
 - [ ] Fine-tuning 평가 파이프라인
-- [ ] TUAB 벤치마크 실험
-- [ ] TUSL 벤치마크 실험
-- [ ] BCI Competition 벤치마크 실험
-- [ ] TDBrain 벤치마크 실험
+- [ ] ① TUAB 벤치마크 (정상/비정상, 표준 비교)
+- [ ] ② TDBrain 벤치마크 (파킨슨, 26ch, TUH 무관)
+- [ ] ③ APAVA 벤치마크 (알츠하이머, TUH 무관)
+- [ ] ④ BCI/MI 벤치마크 (운동 상상, TUH 무관)
 - [ ] Ablation Study 설계 및 실행
 
 ## 5. 논문 작성

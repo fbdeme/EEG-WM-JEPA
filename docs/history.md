@@ -67,6 +67,14 @@
 - LuMamba (2026.03): LUNA의 Channel Mixer를 Mamba에 결합
 - 우리의 추가 기여: padding_mask 지원 (기존 논문들은 동일 채널 수 데이터셋 내 학습만 수행)
 
+### Phase 8: 사전학습 데이터 전략 확정
+- **REVE에 TUH가 이미 포함** (26,847시간, 전체 44%) 확인 → TUH 별도 확보 불필요
+- **데이터 누출 문제 발견**: TUAB/TUSL은 TUH의 부분집합 → REVE로 사전학습 시 leakage 위험
+- 기존 연구 분리 전략 조사: Laya(피험자 단위, ★★★), LaBraM(TUH 미사용, ★★★), LuMamba/REVE(모호, ★★☆), NeuroGPT(문제 지적됨, ★☆☆)
+- **Laya 방식 채택**: 벤치마크 test/val set 피험자의 모든 녹화를 REVE에서 제거
+- 리뷰 논문(arXiv 2507.11783)이 TUH 사전학습+TUAB 평가의 체계적 문제 지적 → 우리는 이를 사전 방어
+- **전처리 파이프라인 확정**: REVE에서 스트리밍 다운로드 → 전처리 → HF Private 업로드 → 원본 삭제 (디스크에 안 쌓임)
+
 ---
 
 ## 변경 로그 (Method Changes)
@@ -80,3 +88,7 @@
 | 2026-03-31 | CAR 적용 시점: Dataset 내 (패딩 전) | 패딩 채널이 CAR 평균 왜곡 방지 | Mask-aware 로직 불필요 |
 | 2026-03-31 | 데이터 파이프라인 v1.0 확정 | REVE+TUH 혼합, LitData, padding_mask | data_pipeline.md 신규 |
 | 2026-03-31 | research_method.md v1.1 업데이트 | 데이터 파이프라인 반영 | 전처리 섹션 갱신 |
+| 2026-03-31 | TUH 별도 확보 기각 → REVE 단일 소스 | REVE에 TUH 포함 (44%), 중복 방지 | data_pipeline.md v2.0 |
+| 2026-03-31 | 피험자 단위 데이터 분리(Laya 방식) 채택 | Leakage 방지, 리뷰어 공격 방어 | 전처리에 필터링 단계 추가 |
+| 2026-03-31 | 피험자 단위 제거 기각 → REVE 전체 사전학습 확정 | REVE 메타데이터에 피험자 ID 없음. SSL은 라벨 미사용이므로 leakage 논쟁 최소. 비TUH 벤치마크 추가로 방어 | data_pipeline.md v3.0 |
+| 2026-03-31 | 다운스트림 4종 확정 (TUAB+TDBrain+APAVA+MI) | TUAB로 표준 비교 + 비TUH 3종으로 전이 능력 증명 | research_method.md 벤치마크 갱신 |
