@@ -93,6 +93,12 @@
 - GPU 메모리 프로파일 실측: 19.5M 모델이 batch=1024, 128ch에서도 7.3GB만 사용 (A6000 48GB 대비 여유)
 - 학습 파라미터도 레퍼런스 대비 조정: lambda_sigreg 1.0→0.09, lambda_query 0.1→0.8, sigreg_projections 64→512, batch_size 64→512
 
+### Phase 10.5: 학습 파라미터 확정
+- **예측 방식 논의**: LeWM의 autoregressive(미래 프레임 예측) vs masking(가려진 패치 예측) 비교 분석. LeWM의 AR은 프레임 간 예측이라 우리 파이프라인(독립 2초 윈도우)과 비호환. spatiotemporal masking이 논문 핵심 기여이므로 **masking 유지 확정**
+- **bf16 전환**: fp16 + GradScaler → bf16 (GradScaler 제거). 레퍼런스 전부 bf16 사용, SIGReg의 분포 통계 계산에서 fp16 overflow 위험 제거
+- **Warmup 10 epochs 확정**: 기존 step 기반(~2 epochs)에서 epoch 기반으로 변경. LUNA=10/60(17%), LaBraM=5/50(10%) 참고, 10%인 10 epochs 채택. SIGReg 초반 불안정 방지
+- **Mask block 크기 유지 확정**: 0.5~1.0초(4~8패치). spatiotemporal 마스킹에서 시간 블록이 커지면 공간 마스킹 여지 감소. Laya(5~10패치)와 겹치는 범위
+
 ### Phase 11: wandb 로깅 체계 구축
 - wandb 연동 완료. 매 step: loss 분해(pred/sigreg/query), grad_norm, lr, 배치 채널 통계. 매 epoch: 요약 + duration. 체크포인트: 5 epoch마다 wandb Artifact 업로드
 - `.env`에 HF_TOKEN, WANDB_API_KEY 관리 (`.gitignore` 반영 완료)
@@ -118,3 +124,7 @@
 | 2026-04-01 | 모델 구조 하이퍼파라미터 확정 (19.5M) | LeWM/Laya/LUNA 비율 분석 기반 | configs/default.yaml 갱신 |
 | 2026-04-01 | 학습 파라미터 조정 (SIGReg, query, batch) | 레퍼런스 대비 불일치 수정 | configs/default.yaml 갱신 |
 | 2026-04-01 | wandb 로깅 체계 구축 | 학습 분석 및 모니터링 | main.py 갱신, wandb 연동 |
+| 2026-04-01 | Masking 예측 방식 유지 확정 (AR 기각) | spatiotemporal masking이 논문 핵심 기여, AR은 파이프라인 비호환 | 구조 변경 없음 |
+| 2026-04-01 | fp16 → bf16 전환, GradScaler 제거 | 레퍼런스 전부 bf16, SIGReg overflow 방지 | main.py 갱신 |
+| 2026-04-01 | Warmup step 기반 → 10 epochs 기반 | LUNA/LaBraM 참고, ~10% 표준 | main.py + config 갱신 |
+| 2026-04-01 | Mask block 0.5~1.0초 유지 확정 | spatiotemporal 마스킹과의 균형 | 변경 없음 |

@@ -40,7 +40,8 @@ def build_scheduler(
     optimizer: torch.optim.Optimizer, cfg: dict, steps_per_epoch: int
 ) -> torch.optim.lr_scheduler.LRScheduler:
     total_steps = cfg["training"]["epochs"] * steps_per_epoch
-    warmup_steps = min(total_steps // 10, 1000)
+    warmup_epochs = cfg["training"].get("warmup_epochs", 10)
+    warmup_steps = warmup_epochs * steps_per_epoch
 
     def lr_lambda(step):
         if step < warmup_steps:
@@ -88,7 +89,6 @@ def train_one_epoch(
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    scaler: torch.amp.GradScaler,
     device: torch.device,
     epoch: int,
     global_step: int,
@@ -112,21 +112,19 @@ def train_one_epoch(
             for k, v in batch.items()
         }
 
-        # Forward with AMP
-        with torch.amp.autocast("cuda", dtype=torch.float16):
+        # Forward with AMP (bf16)
+        with torch.amp.autocast("cuda", dtype=torch.bfloat16):
             output = model(batch)
             loss = output["loss"] / grad_accum_steps
 
-        # Backward
-        scaler.scale(loss).backward()
+        # Backward (no GradScaler needed for bf16)
+        loss.backward()
 
         if (step + 1) % grad_accum_steps == 0:
-            scaler.unscale_(optimizer)
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.parameters(), max_norm=1.0
             )
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
             global_step += 1
@@ -291,7 +289,6 @@ def main():
     steps_per_epoch = 500 if not args.dummy else len(loader)
     optimizer = build_optimizer(model, cfg)
     scheduler = build_scheduler(optimizer, cfg, steps_per_epoch)
-    scaler = torch.amp.GradScaler("cuda")
 
     start_epoch = 0
     global_step = 0
@@ -321,7 +318,7 @@ def main():
         print(f"Epoch {epoch}/{epochs-1}")
 
         metrics, global_step = train_one_epoch(
-            model, loader, optimizer, scheduler, scaler,
+            model, loader, optimizer, scheduler,
             device, epoch, global_step,
             grad_accum_steps=args.grad_accum,
             log_interval=log_interval,

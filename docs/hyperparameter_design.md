@@ -196,12 +196,19 @@ Pred/Enc 비율:   1.75 (LeWM ~2.0 근사)
 | epochs | 100 | 50~300 | 적절 |
 | dropout | 0.1 | 0.1 | 표준 |
 
-### 추가 고려사항
+### 추가 확정 (2026-04-01 후반)
 
-- **mask_block 크기**: patch_size가 40→25로 변경되어 블록 크기(패치 단위)가 달라짐. 0.5초 = 4패치, 1.0초 = 8패치 (이전: 3~5패치). 마스킹 세밀도 검증 필요
-- **effective batch size**: batch_size=512에서 OOM 시 grad_accum으로 보완 가능
-- **학습 스케줄**: warmup + cosine decay 유지, warmup_steps = min(total_steps//10, 1000)
-- **SIGReg projections 512 vs 1024**: 512로 시작 후 성능 보고 증가 여부 판단
+| 파라미터 | 변경 전 | 변경 후 | 근거 |
+|---|---|---|---|
+| **precision** | fp16 + GradScaler | **bf16** (GradScaler 제거) | 레퍼런스 전부 bf16, 범위가 fp32와 동일하여 SIGReg overflow 방지 |
+| **warmup** | min(total_steps//10, 1000) = ~2 epochs | **10 epochs** (epoch 기반) | LUNA=10/60(17%), LaBraM=5/50(10%), ~10% 표준 |
+| **mask_block** | 0.5~1.0초 (4~8패치) | **유지** | 16패치 중 4~8패치 블록. spatiotemporal 마스킹에서 시간 블록이 너무 크면 공간 마스킹 비중 감소. Laya(5~10)와 겹치는 범위 |
+| **예측 방식** | masking (A) | **masking 유지** | LeWM의 autoregressive는 프레임 간 예측. 우리의 spatiotemporal masking이 논문 기여의 핵심이므로 masking 방식 유지 |
+
+### 학습 시 검증 필요
+
+- **grad_accum**: batch=512가 실제 스트리밍에서 OOM이면 올려야 함
+- **SIGReg projections 512 vs 1024**: 512로 시작 후 안정성 보고 판단
 
 ---
 

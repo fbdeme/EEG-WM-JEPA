@@ -17,7 +17,9 @@
   - [x] Patch size 확정: 25 (125ms, 16패치)
   - [x] Channel Mixer 확정: mixer_dim=64, queries=8 (4x 공간 압축 병목)
   - [x] GPU 메모리 프로파일 실측 (19.5M, batch=1024 128ch에서 7.3GB)
-  - [ ] 학습 파라미터 최종 검증 (SIGReg lambda, batch_size 등)
+  - [x] 학습 파라미터 확정: bf16, warmup 10 epochs, mask_block 유지 (2026-04-01)
+  - [x] 예측 방식 확정: masking 유지 (autoregressive 기각) (2026-04-01)
+  - [ ] 학습 시 검증: grad_accum, SIGReg projections 512 vs 1024
 - [x] 사전학습 데이터셋 선정: REVE(4.4TB) + TUH(1.6TB) (2026-03-31)
 - [x] 데이터 파이프라인 설계 확정 (2026-03-31)
 - [x] hyperparameter_design.md 문서화 (2026-04-01)
