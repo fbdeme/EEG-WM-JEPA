@@ -88,11 +88,15 @@ class DynamicChannelMixer(nn.Module):
         self,
         patches: torch.Tensor,
         coords: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             patches: [B, C, N, E] patch embeddings
             coords: [B, C, 3] or [C, 3] electrode coordinates
+            padding_mask: [B, C] True = padded (invalid) channel.
+                          Passed as key_padding_mask to cross-attention
+                          so padded channels get zero attention weight.
         Returns:
             sequence: [B, N, D] fixed-size latent sequence
             attn_weights: [B, Nq, C] query-channel affinity (for specialization loss)
@@ -119,7 +123,10 @@ class DynamicChannelMixer(nn.Module):
             q = self.queries.unsqueeze(0).expand(B, -1, -1)
 
             # Cross-attention: queries attend over channels
-            out, attn = self.cross_attn(q, kv, kv)  # out: [B, Nq, mixer_dim]
+            # key_padding_mask: True positions are ignored in attention
+            out, attn = self.cross_attn(
+                q, kv, kv, key_padding_mask=padding_mask
+            )  # out: [B, Nq, mixer_dim]
             all_attn.append(attn)
 
             # Flatten queries into single vector: [B, Nq * mixer_dim] → [B, D]

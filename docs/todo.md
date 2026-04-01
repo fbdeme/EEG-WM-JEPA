@@ -10,9 +10,17 @@
 - [x] 핵심 아키텍처 결정: LeWM(SIGReg) vs VQ-JEPA → Track A 확정 (2026-03-30)
 - [x] 방법론 3단계 파이프라인 확정 (2026-03-30)
 - [x] 전처리 표준화 5요소 정의 (2026-03-30)
-- [ ] 하이퍼파라미터 설계 (패치 크기, 임베딩 차원, 쿼리 수 등)
+- [x] 하이퍼파라미터 설계 — 모델 구조 확정 (2026-04-01)
+  - [x] 레퍼런스 논문(LeWM/Laya/LUNA/LaBraM/Brain-JEPA) 하이퍼파라미터 비교 조사
+  - [x] Encoder 확정: D256, L8, H4 (LUNA-Base 수준)
+  - [x] Predictor 확정: L6, H12, dim_head=64 (LeWM 비율 Pred/Enc=1.75)
+  - [x] Patch size 확정: 25 (125ms, 16패치)
+  - [x] Channel Mixer 확정: mixer_dim=64, queries=8 (4x 공간 압축 병목)
+  - [x] GPU 메모리 프로파일 실측 (19.5M, batch=1024 128ch에서 7.3GB)
+  - [ ] 학습 파라미터 최종 검증 (SIGReg lambda, batch_size 등)
 - [x] 사전학습 데이터셋 선정: REVE(4.4TB) + TUH(1.6TB) (2026-03-31)
 - [x] 데이터 파이프라인 설계 확정 (2026-03-31)
+- [x] hyperparameter_design.md 문서화 (2026-04-01)
 - [ ] 연구 제안서 최종 작성
 
 ## 2. 구현 - Stage 1: EEG 표준화
@@ -23,11 +31,12 @@
 - [x] Bandpass 필터 구현 (0.5~75Hz) (2026-03-30)
 - [x] 2초 윈도우 세그멘테이션 구현 (2026-03-30)
 - [x] 더미 데이터셋 로더 구현 (2026-03-30)
-- [ ] 채널 Alias 매핑 로직 구현 (REVE Position Bank 연동)
+- [x] 채널 Alias 매핑 로직 구현 (REVE Position Bank 연동) (2026-03-31)
+- [x] REVE 데이터 로더 구현 (raw memmap + 메타데이터 CSV) (2026-03-31)
 - [ ] 드롭 비율 로깅 및 품질 통제 로직
-- [ ] 오프라인 전처리 스크립트 (.edf → LitData)
-- [ ] Custom collate_fn 구현 (가변 채널 padding + padding_mask)
-- [ ] Channel Mixer에 padding_mask 지원 추가
+- [x] 오프라인 전처리 스크립트 (REVE .npy → HF parquet) (2026-03-31)
+- [x] Custom collate_fn 구현 (가변 채널 padding + padding_mask) (2026-03-31)
+- [x] Channel Mixer에 padding_mask 지원 추가 (2026-03-31)
 
 ## 3. 구현 - Stage 2: 사전학습
 
@@ -38,8 +47,10 @@
 - [x] Predictor 구현 (2026-03-30)
 - [x] Loss 함수 구현 (Prediction + SIGReg + Query Specialization) (2026-03-30)
 - [x] 더미 데이터 forward/backward pass 검증 (2026-03-30)
-- [ ] LitData StreamingDataset 통합
-- [ ] 학습 루프 및 로깅 구현
+- [x] HF Streaming Dataset 통합 (LitData → HF datasets streaming으로 변경) (2026-03-31)
+- [x] 학습 루프 및 로깅 구현 (AMP, grad accum, cosine scheduler) (2026-03-31)
+- [x] wandb 로깅 체계 구축 (step/epoch 로깅, artifact 업로드) (2026-04-01)
+- [ ] REVE 전처리 실행 (322개 레코딩 → HF Private repo 업로드) — 진행 중 (54/322 완료, 54~ 재개 중)
 - [ ] 사전학습 실행 및 수렴 확인
 
 ## 4. 구현 - Stage 3: 다운스트림 평가

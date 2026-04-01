@@ -10,4 +10,10 @@ dependencies = [
     "mne",
     "einops",
     "pyyaml",
+    "datasets",
+    "huggingface-hub",
+    "pyarrow",
+    "transformers",
+    "tqdm",
+    "wandb>=0.25.1",
 ]

@@ -126,15 +126,19 @@ class EEGJEPA(nn.Module):
             norm_fn=nn.BatchNorm1d,
         )
 
-        # Predictor
+        # Predictor (LeWM style: fixed dim_head, independent of encoder_dim)
+        predictor_dim_head = model_cfg.get("predictor_dim_head", 64)
+        predictor_mlp_dim = model_cfg.get(
+            "predictor_mlp_dim", model_cfg["encoder_dim"] * 4
+        )
         self.predictor = EEGPredictor(
             num_patches=num_patches,
             embed_dim=model_cfg["encoder_dim"],
             hidden_dim=model_cfg["encoder_dim"],
             depth=model_cfg["predictor_depth"],
             heads=model_cfg["predictor_heads"],
-            dim_head=model_cfg["encoder_dim"] // model_cfg["predictor_heads"],
-            mlp_dim=model_cfg["encoder_dim"] * 4,
+            dim_head=predictor_dim_head,
+            mlp_dim=predictor_mlp_dim,
             dropout=model_cfg["dropout"],
         )
 
@@ -165,18 +169,26 @@ class EEGJEPA(nn.Module):
         self.lambda_sigreg = train_cfg["lambda_sigreg"]
         self.lambda_query = train_cfg["lambda_query"]
 
-    def encode(self, eeg: torch.Tensor, coords: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode(
+        self,
+        eeg: torch.Tensor,
+        coords: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode EEG to latent sequence.
 
         Args:
             eeg: [B, C, T]
             coords: [B, C, 3] or [C, 3]
+            padding_mask: [B, C] True = padded channel (optional)
         Returns:
             encoded: [B, N, D_enc]
             attn_weights: [B, Nq, C]
         """
         patches = self.patch_embedder(eeg)        # [B, C, N, E]
-        mixed, attn = self.channel_mixer(patches, coords)  # [B, N, D]
+        mixed, attn = self.channel_mixer(
+            patches, coords, padding_mask=padding_mask
+        )  # [B, N, D]
         encoded = self.encoder(mixed)              # [B, N, D_enc]
         return encoded, attn
 
@@ -184,16 +196,20 @@ class EEGJEPA(nn.Module):
         """Full forward pass with loss computation.
 
         Args:
-            batch: dict with 'eeg' [B, C, T] and 'coords' [B, C, 3] or [C, 3]
+            batch: dict with 'eeg' [B, C, T], 'coords' [B, C, 3] or [C, 3],
+                   and optionally 'padding_mask' [B, C]
         Returns:
             dict with 'loss', 'pred_loss', 'sigreg_loss', 'query_loss'
         """
         eeg = batch["eeg"]
         coords = batch["coords"]
+        padding_mask = batch.get("padding_mask")
         B = eeg.shape[0]
 
         # 1. Encode full sequence
-        encoded, attn_weights = self.encode(eeg, coords)  # [B, N, D_enc]
+        encoded, attn_weights = self.encode(
+            eeg, coords, padding_mask=padding_mask
+        )  # [B, N, D_enc]
 
         # 2. Generate masks
         mask = generate_batch_masks(

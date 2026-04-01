@@ -11,51 +11,59 @@ preprocessing:
 # Stage 2: Model Architecture
 model:
   # Patch Embedder
-  patch_size: 40             # 200ms at 200Hz (400 samples / 40 = 10 patches)
+  patch_size: 25             # 125ms at 200Hz → 16 patches per window (Laya reference)
   patch_embed_dim: 64        # E: per-channel patch embedding dim
 
-  # Channel Mixer
+  # Channel Mixer (spatial bottleneck)
   num_queries: 8             # Nq: learned query count
-  mixer_dim: 256             # D: output dimension after mixing
+  mixer_dim: 64              # D_mix: compressed spatial dim (4x bottleneck vs encoder_dim)
   fourier_features: 32       # Fourier encoding dim for 3D coords
   num_heads_mixer: 4         # cross-attention heads
 
   # Transformer Encoder
-  encoder_dim: 256           # must match mixer_dim
-  encoder_depth: 6           # number of transformer layers
-  encoder_heads: 4           # attention heads
+  encoder_dim: 256           # D: main representation dimension
+  encoder_depth: 8           # LUNA-Base level depth
+  encoder_heads: 4           # attention heads (dim_head = 64)
   dropout: 0.1
 
-  # Predictor
+  # Predictor (LeWM style: strong predictor with fixed dim_head=64)
   predictor_dim: 256
-  predictor_depth: 3
-  predictor_heads: 4
+  predictor_depth: 6         # deep predictor (LeWM = 6)
+  predictor_heads: 12        # 12 heads × dim_head 64 = inner_dim 768
+  predictor_dim_head: 64     # fixed, independent of encoder_dim
+  predictor_mlp_dim: 2048    # wide MLP (LeWM = 2048)
 
-  # Projector (MLP)
-  projector_hidden: 1024     # Dup >> D
-  projector_out: 128         # Dproj < D
+  # Projector (MLP with BatchNorm)
+  projector_hidden: 2048     # LeWM = 2048
+  projector_out: 256         # match encoder_dim
 
 # Stage 2: Training
 training:
   # Masking
-  mask_ratio: 0.6            # 60%
+  mask_ratio: 0.6            # 60% (Laya/LuMamba standard)
   mask_block_min_sec: 0.5    # minimum block length in seconds
   mask_block_max_sec: 1.0    # maximum block length in seconds
 
   # Loss weights
-  lambda_sigreg: 1.0
-  lambda_query: 0.1
+  lambda_sigreg: 0.09        # LeWM optimal range [0.01, 0.2]
+  lambda_query: 0.8          # LUNA=0.8, Laya=1.0
 
   # SIGReg
-  sigreg_num_projections: 64  # M: random projection directions
+  sigreg_num_projections: 512  # LeWM=1024, increased from 64
 
   # Optimizer
   lr: 1.0e-4
   weight_decay: 0.05
-  batch_size: 64
+  batch_size: 512            # increased (SIGReg needs large batch for distribution stats)
   epochs: 100
 
 # Stage 3: Downstream
 downstream:
   freeze_encoder: true       # linear probing by default
   num_classes: 2             # TUAB: normal/abnormal
+
+# Logging
+logging:
+  wandb_project: "eeg-wm-jepa"
+  log_interval: 50           # log every N steps
+  save_interval: 5           # save checkpoint every N epochs

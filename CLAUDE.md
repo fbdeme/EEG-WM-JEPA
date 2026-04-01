@@ -48,6 +48,18 @@ Raw EEG [B, C, T] (C is variable per dataset)
 - LuMamba: LeJEPA + Mamba backbone for EEG
 - DELTA: RVQ tokenizer for EEG (not used, but studied for comparison)
 
+## Documentation Convention
+
+작업 완료 후 반드시 `docs/` 내 관련 문서를 업데이트할 것:
+
+- **`docs/todo.md`**: 완료된 항목 `[x]` 체크 + 날짜 기록. 진행 중인 항목은 상태 표시 (예: "— 진행 중 (54/322)")
+- **`docs/history.md`**: 주요 의사결정이나 기술적 발견이 있을 때 Phase 번호로 추가. 변경 로그 테이블에도 한 줄 추가
+- **`docs/data_pipeline.md`**: 데이터 파이프라인 변경 시
+- **`docs/hyperparameter_design.md`**: 하이퍼파라미터 변경 시
+- **`configs/default.yaml`**: 하이퍼파라미터 값 변경 시 config에 반영
+
+코드만 고치고 문서를 안 고치면 안 됨. 사용자가 별도로 요청하지 않아도 관련 docs는 함께 업데이트할 것.
+
 ## Research Context
 
 Prior conversation history and paper analyses are stored in `EEG Preprocessing Methods in Research Papers.zip`. This contains markdown reports and paper excerpts covering: Brain-JEPA, EEG-VJEPA, S-JEPA, HEAR, LUNA, SPEED, DELTA, LaBraM, NeuroGPT, EEGPT, DeWave, Laya, LuMamba, and LeWM.

@@ -77,6 +77,28 @@
 
 ---
 
+## 2026-04-01: 하이퍼파라미터 설계 및 로깅 구축
+
+### Phase 9: 레퍼런스 논문 하이퍼파라미터 조사
+- LeWM, Laya, LUNA, LaBraM, Brain-JEPA, S-JEPA, LuMamba 7개 논문의 하이퍼파라미터 비교 분석
+- **LeWM의 독특한 설계 발견**: Predictor가 Encoder보다 2배 큰 구조 (Pred/Enc ≈ 2.0). 다른 JEPA(I-JEPA, Brain-JEPA)와 완전히 반대. SIGReg 방식에서 predictor 용량이 representation 품질에 직결
+- **LeWM predictor의 dim_head 메커니즘 분석**: working dim은 encoder와 동일(192)하지만, attention 내부에서 `heads(16) × dim_head(64) = 1024`로 확장. 이 내부 확장이 파라미터의 대부분을 차지
+- 기존 코드의 문제 발견: `dim_head = encoder_dim / heads`로 계산하여 heads를 늘려도 파라미터가 변하지 않음 → `predictor_dim_head`를 64로 고정하는 config 옵션 추가
+
+### Phase 10: 모델 구조 하이퍼파라미터 확정
+- **Encoder**: D256, L6→8, H4 (LUNA-Base 수준)
+- **Predictor**: depth 3→6, heads 4→12, dim_head=64 고정, mlp=2048 (LeWM 비율 반영, Pred/Enc=1.75)
+- **Patch size**: 40→25 (125ms, 16패치. Laya 기준, alpha 리듬 1주기 커버)
+- **Channel Mixer**: mixer_dim 256→64 (4x 공간 압축 병목), queries=8 유지
+- GPU 메모리 프로파일 실측: 19.5M 모델이 batch=1024, 128ch에서도 7.3GB만 사용 (A6000 48GB 대비 여유)
+- 학습 파라미터도 레퍼런스 대비 조정: lambda_sigreg 1.0→0.09, lambda_query 0.1→0.8, sigreg_projections 64→512, batch_size 64→512
+
+### Phase 11: wandb 로깅 체계 구축
+- wandb 연동 완료. 매 step: loss 분해(pred/sigreg/query), grad_norm, lr, 배치 채널 통계. 매 epoch: 요약 + duration. 체크포인트: 5 epoch마다 wandb Artifact 업로드
+- `.env`에 HF_TOKEN, WANDB_API_KEY 관리 (`.gitignore` 반영 완료)
+
+---
+
 ## 변경 로그 (Method Changes)
 
 | 날짜 | 변경 내용 | 이유 | 영향 |
@@ -92,3 +114,7 @@
 | 2026-03-31 | 피험자 단위 데이터 분리(Laya 방식) 채택 | Leakage 방지, 리뷰어 공격 방어 | 전처리에 필터링 단계 추가 |
 | 2026-03-31 | 피험자 단위 제거 기각 → REVE 전체 사전학습 확정 | REVE 메타데이터에 피험자 ID 없음. SSL은 라벨 미사용이므로 leakage 논쟁 최소. 비TUH 벤치마크 추가로 방어 | data_pipeline.md v3.0 |
 | 2026-03-31 | 다운스트림 4종 확정 (TUAB+TDBrain+APAVA+MI) | TUAB로 표준 비교 + 비TUH 3종으로 전이 능력 증명 | research_method.md 벤치마크 갱신 |
+| 2026-04-01 | predictor_dim_head=64 고정 옵션 추가 | LeWM 분석 결과: dim_head 고정이 핵심 | eeg_jepa.py 수정 |
+| 2026-04-01 | 모델 구조 하이퍼파라미터 확정 (19.5M) | LeWM/Laya/LUNA 비율 분석 기반 | configs/default.yaml 갱신 |
+| 2026-04-01 | 학습 파라미터 조정 (SIGReg, query, batch) | 레퍼런스 대비 불일치 수정 | configs/default.yaml 갱신 |
+| 2026-04-01 | wandb 로깅 체계 구축 | 학습 분석 및 모니터링 | main.py 갱신, wandb 연동 |
