@@ -105,6 +105,23 @@
 
 ---
 
+## 2026-04-02: REVE 전처리 진행 및 서버 이관 결정
+
+### Phase 12: REVE 전처리 실행 (81/322)
+- `preprocess_parallel.py` (4 workers, idx 55→322): 디스크 100% → 업로드 deadlock으로 중단
+- `preprocess_pipeline.py` (DL 2 + Proc 4 + Upload 1 분리): tmux 세션 종료 시 프로세스 같이 사망
+- `setsid nohup`으로 완전 분리 실행: OOM killer에 의해 사망 (55GB RSS, 62GB 서버)
+- **결론**: 422GB SSD + 62GB RAM 서버에서는 안정적 전처리 불가능
+  - 원인 1: REVE recording당 ~15GB raw data, 2개 동시 다운로드만으로 메모리 초과
+  - 원인 2: 전처리 산출물 + HF 캐시 + 업로드 대기 shard로 디스크 순식간에 포화
+- **HF repo 현황** (`fbdeme/reve-preprocessed`): 835 shards 업로드 완료
+  - idx 0-67: 완료 (644 shards)
+  - idx 68-80: 유실 (디스크 풀 상태에서 로컬 shard 삭제됨, 재처리 필요)
+  - idx 81-93: 완료 (191 shards)
+- **서버 이관 결정**: 4TB SSD 서버에서 idx 68-80 + idx 94-322 재개 예정
+
+---
+
 ## 변경 로그 (Method Changes)
 
 | 날짜 | 변경 내용 | 이유 | 영향 |
@@ -128,3 +145,5 @@
 | 2026-04-01 | fp16 → bf16 전환, GradScaler 제거 | 레퍼런스 전부 bf16, SIGReg overflow 방지 | main.py 갱신 |
 | 2026-04-01 | Warmup step 기반 → 10 epochs 기반 | LUNA/LaBraM 참고, ~10% 표준 | main.py + config 갱신 |
 | 2026-04-01 | Mask block 0.5~1.0초 유지 확정 | spatiotemporal 마스킹과의 균형 | 변경 없음 |
+| 2026-04-01 | 논문 Introduction + Related Work 초안 | 40+ 논문 인용 검증 포함 | paper/main.md |
+| 2026-04-02 | REVE 전처리 81/322 완료, 서버 이관 결정 | 422GB 서버에서 OOM+디스크 부족 3회 실패 | 4TB SSD 서버에서 재개 예정 |

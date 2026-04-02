@@ -218,20 +218,63 @@ def upload_shard(
     hf_repo: str,
     api: HfApi,
     tmp_dir: Path,
+    max_retries: int = 3,
 ):
-    """Write a parquet shard locally and upload to HF."""
+    """Write a parquet shard locally and upload to HF with retry."""
     filename = f"train/shard_{shard_idx:06d}.parquet"
     local_path = tmp_dir / filename
     local_path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, local_path)
 
-    api.upload_file(
-        path_or_fileobj=str(local_path),
-        path_in_repo=f"data/{filename}",
-        repo_id=hf_repo,
-        repo_type="dataset",
-    )
-    local_path.unlink()
+    for attempt in range(max_retries):
+        try:
+            api.upload_file(
+                path_or_fileobj=str(local_path),
+                path_in_repo=f"data/{filename}",
+                repo_id=hf_repo,
+                repo_type="dataset",
+            )
+            local_path.unlink()
+            return
+        except Exception as e:
+            print(f"  [RETRY {attempt+1}/{max_retries}] Shard {shard_idx}: {e}")
+            import time
+            time.sleep(5 * (attempt + 1))
+
+    # Last resort: save locally, skip upload
+    print(f"  [FAIL] Shard {shard_idx}: saved locally at {local_path}")
+
+
+def upload_batch(
+    tmp_dir: Path,
+    hf_repo: str,
+    api: HfApi,
+    max_retries: int = 3,
+):
+    """Upload all local parquet files in tmp_dir as a single commit."""
+    parquet_files = sorted(tmp_dir.rglob("*.parquet"))
+    if not parquet_files:
+        return
+
+    for attempt in range(max_retries):
+        try:
+            api.upload_folder(
+                folder_path=str(tmp_dir),
+                path_in_repo="data",
+                repo_id=hf_repo,
+                repo_type="dataset",
+                allow_patterns="**/*.parquet",
+            )
+            # Clean up after successful upload
+            for f in parquet_files:
+                f.unlink()
+            return
+        except Exception as e:
+            print(f"  [RETRY {attempt+1}/{max_retries}] Batch upload: {e}")
+            import time
+            time.sleep(10 * (attempt + 1))
+
+    print(f"  [FAIL] Batch upload failed. Files saved in {tmp_dir}")
 
 
 def main():
@@ -296,10 +339,12 @@ def main():
         f"({len(recordings)} recordings)"
     )
 
-    # Process recordings, accumulate windows, flush as shards
+    # Process recordings, write shards locally, batch upload periodically
     buffer = []
     shard_idx = args.start_idx * 100  # offset shard numbering to avoid collisions
     total_windows = 0
+    shards_pending = 0  # local shards waiting for batch upload
+    BATCH_UPLOAD_EVERY = 10  # batch upload every N shards (1 commit instead of N)
 
     for _, row in tqdm(
         recordings.iterrows(), total=len(recordings), desc="Recordings"
@@ -319,23 +364,34 @@ def main():
         buffer.extend(windows)
         total_windows += len(windows)
 
-        # Flush when buffer is large enough
+        # Flush buffer to local parquet files
         while len(buffer) >= args.shard_size:
             shard_data = buffer[:args.shard_size]
             buffer = buffer[args.shard_size:]
             table = make_parquet_table(shard_data)
 
+            filename = f"train/shard_{shard_idx:06d}.parquet"
+            local_path = tmp_dir / filename
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+
             if args.dry_run:
-                local_path = tmp_dir / f"shard_{shard_idx:06d}.parquet"
                 pq.write_table(table, local_path)
                 print(f"  [DRY] Saved {local_path} ({len(shard_data)} windows)")
             else:
-                upload_shard(table, shard_idx, args.hf_repo, api, tmp_dir)
-                print(f"  [UP] Shard {shard_idx} ({len(shard_data)} windows)")
+                pq.write_table(table, local_path)
+                shards_pending += 1
+                print(f"  [LOCAL] Shard {shard_idx} ({len(shard_data)} windows)")
 
             shard_idx += 1
             del table, shard_data
             gc.collect()
+
+        # Batch upload when enough shards accumulated
+        if not args.dry_run and shards_pending >= BATCH_UPLOAD_EVERY:
+            print(f"  [UPLOAD] Batch uploading {shards_pending} shards...")
+            upload_batch(tmp_dir, args.hf_repo, api)
+            print(f"  [UPLOAD] Done")
+            shards_pending = 0
 
         # Clear HF cache for this recording to save disk
         _clear_hf_cache(big_idx)
@@ -344,14 +400,24 @@ def main():
     # Flush remaining buffer
     if buffer:
         table = make_parquet_table(buffer)
+        filename = f"train/shard_{shard_idx:06d}.parquet"
+        local_path = tmp_dir / filename
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(table, local_path)
+
         if args.dry_run:
-            local_path = tmp_dir / f"shard_{shard_idx:06d}.parquet"
-            pq.write_table(table, local_path)
             print(f"  [DRY] Saved {local_path} ({len(buffer)} windows)")
         else:
-            upload_shard(table, shard_idx, args.hf_repo, api, tmp_dir)
-            print(f"  [UP] Shard {shard_idx} ({len(buffer)} windows)")
+            shards_pending += 1
+            print(f"  [LOCAL] Shard {shard_idx} ({len(buffer)} windows)")
+
         shard_idx += 1
+
+    # Final batch upload
+    if not args.dry_run and shards_pending > 0:
+        print(f"  [UPLOAD] Final batch uploading {shards_pending} shards...")
+        upload_batch(tmp_dir, args.hf_repo, api)
+        print(f"  [UPLOAD] Done")
 
     print(f"\nDone! Total windows: {total_windows}, Shards: {shard_idx}")
 

@@ -52,7 +52,12 @@
 - [x] HF Streaming Dataset 통합 (LitData → HF datasets streaming으로 변경) (2026-03-31)
 - [x] 학습 루프 및 로깅 구현 (AMP, grad accum, cosine scheduler) (2026-03-31)
 - [x] wandb 로깅 체계 구축 (step/epoch 로깅, artifact 업로드) (2026-04-01)
-- [ ] REVE 전처리 실행 (322개 레코딩 → HF Private repo 업로드) — 진행 중 (54/322 완료, 54~ 재개 중)
+- [ ] REVE 전처리 실행 (322개 레코딩 → HF Private repo 업로드) — 진행 중 (81/322 완료, 835 shards on HF) (2026-04-02)
+  - idx 0-67: 완료 (644 shards)
+  - idx 68-80: 미완료 (디스크 풀로 유실, 재처리 필요)
+  - idx 81-93: 완료 (191 shards)
+  - idx 94-322: 미처리 (228 recordings 남음, ~3.6TB raw)
+  - ⚠️ 현재 서버(422GB SSD)에서 OOM + 디스크 부족으로 3회 실패 → 4TB SSD 서버로 이관 예정
 - [ ] 사전학습 실행 및 수렴 확인
 
 ## 4. 구현 - Stage 3: 다운스트림 평가
@@ -67,10 +72,13 @@
 
 ## 5. 논문 작성
 
-- [ ] Introduction 작성
-- [ ] Related Work 작성
-- [ ] Method 작성
-- [ ] Experiments & Results 작성
+- [x] 논문 초안 구조 잡기 (paper/main.md) (2026-04-01)
+- [x] Introduction 작성 (검증된 인용 포함) (2026-04-01)
+- [x] Related Work 작성 (4개 서브섹션, 비교 테이블) (2026-04-01)
+- [x] References 정리 (40+ 논문 검증) (2026-04-01)
+- [ ] Method 작성 (하이퍼파라미터 확정 내용 반영)
+- [ ] Experiments & Results 작성 (학습 완료 후)
+- [ ] Ablation Studies 실행 및 작성
 - [ ] Discussion & Conclusion 작성
-- [ ] 그림/표 제작
+- [ ] 그림/표 제작 (아키텍처 다이어그램, 결과 테이블)
 - [ ] 투고 대상 학회/저널 선정
