@@ -167,3 +167,4 @@
 | 2026-04-02 | 체크포인트 HF public repo 업로드 + 로컬 3개 유지 | 서버 디스크 절약, 실험 간 모델 공유 | main.py 갱신 |
 | 2026-04-02 | HF 스트리밍 사전학습 파이프라인 검증 완료 | 835 shards로 5 step 테스트: loss 72→36, 정상 수렴 | 전처리 완료 후 바로 학습 가능 |
 | 2026-04-02 | 학습 데이터 로딩 병목 분석 → MosaicML Streaming 채택 | HF 스트리밍 GPU 15%, 커스텀 더블버퍼 대신 검증된 오픈소스 | MDS 로컬 0.234s/step (6.6x↑) |
+| 2026-04-02 | BCI IV 2a downstream 평가 파이프라인 구현 | 4-class MI, MOABB 기반, random init baseline 25.9% (chance) | eval_bci.py + bci_dataset.py |

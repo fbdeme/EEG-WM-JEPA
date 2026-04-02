@@ -245,3 +245,83 @@ REVE 논문 Appendix B 확인 결과, REVE에 TUH가 이미 포함 (14,987명, 2
 TUH를 별도로 받으면 오히려 중복 데이터 발생.
 
 **→ REVE 단일 소스로 확정. TUH 별도 확보 불필요.**
+
+---
+
+## Issue #11: REVE 전처리 서버 한계 (OOM + 디스크 풀)
+
+**상태: ✅ 해결됨 (2026-04-02) — 서버 이관 결정**
+
+### 문제
+학습 서버(422GB SSD, 62GB RAM)에서 REVE 전처리 3회 연속 실패:
+1. `preprocess_parallel.py`: 디스크 100% → 업로드 deadlock
+2. `preprocess_pipeline.py`: tmux 세션 종료 → 프로세스 같이 사망
+3. `setsid nohup` 실행: OOM killer에 의해 사망 (55GB RSS)
+
+### 원인
+- Recording당 ~15GB raw data → 2개 동시 다운로드만으로 메모리 초과
+- 전처리 산출물 + HF 캐시 + 업로드 대기 shard로 디스크 순식간에 포화
+
+### 해결
+- 81/322 recordings까지 처리된 shards (835개) HF에 업로드 완료
+- 나머지 전처리는 4TB SSD 전처리 서버에서 수행 예정
+- 학습 서버에서는 전처리 하지 않기로 결정
+
+---
+
+## Issue #12: HF 스트리밍 학습 병목 (GPU 가동률 15%)
+
+**상태: ✅ 해결됨 (2026-04-02) — MosaicML Streaming 도입**
+
+### 문제
+HF datasets streaming으로 학습 시 GPU가 85% 시간 동안 유휴 상태:
+- GPU 연산: 0.27s/step
+- HF 데이터 로딩: 1.8s/step (avg), 최대 48s (shard 전환 시)
+- GPU 가동률: 15%
+
+### 검토된 대안들
+| 대안 | 문제점 |
+|---|---|
+| 로컬 디스크 저장 | Full 데이터 ~2.5TB > 서버 422GB |
+| 커스텀 더블버퍼 | 동작하나 race condition, 검증 부담 |
+| 300GB 로컬 캐시 | GPU가 병목이라 캐시 늘려도 시간 동일 |
+
+### 해결: MosaicML Streaming
+- `hf://` 프로토콜로 HuggingFace 네이티브 지원
+- `cache_limit` 설정으로 LRU 캐시 자동 관리
+- 내장 prefetch, shuffle, multi-worker
+- Parquet → MDS 포맷 변환 필요 (전처리 서버에서 수행 예정)
+- 로컬 MDS 테스트: 0.234s/step (6.6x 빠름, GPU ~100%)
+
+---
+
+## Issue #13: TUAB 벤치마크 접근 불가
+
+**상태: ⚠️ 보류 중**
+
+### 문제
+TUAB (Temple University Abnormal EEG Corpus) DUA 신청이 기각됨.
+표준 벤치마크이나 현재 데이터 접근 불가.
+
+### 대응
+- TUAB 대신 접근 가능한 벤치마크로 먼저 진행:
+  - BCI IV 2a (4-class MI, 공개, MOABB) — 구현 완료
+  - APAVA (알츠하이머, 공개, OSF) — 구현 예정
+- TDBrain (파킨슨, DUA 필요) — 별도 신청 필요
+- TUAB 접근이 향후 가능해지면 추가
+
+---
+
+## Issue #14: 체크포인트 디스크 관리
+
+**상태: ✅ 해결됨 (2026-04-02)**
+
+### 문제
+학습 서버 디스크가 422GB로, 여러 실험의 체크포인트를 로컬에 쌓으면 디스크 부족.
+모델 19.5M × optimizer state 포함 = ~234MB/checkpoint.
+10회 실험 × 20 checkpoints = ~47GB.
+
+### 해결
+- 체크포인트를 HF public model repo에 업로드 (`checkpoints/{run_name}/epoch_XXXX.pt`)
+- 로컬에는 최신 3개만 유지 (older는 자동 삭제)
+- 실험 완료 후 HF repo에서 best 모델만 남기고 정리

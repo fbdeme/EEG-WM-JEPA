@@ -70,12 +70,15 @@
 
 ## 4. 구현 - Stage 3: 다운스트림 평가
 
-- [ ] Linear Probing 평가 파이프라인
-- [ ] Fine-tuning 평가 파이프라인
-- [ ] ① TUAB 벤치마크 (정상/비정상, 표준 비교)
-- [ ] ② TDBrain 벤치마크 (파킨슨, 26ch, TUH 무관)
-- [ ] ③ APAVA 벤치마크 (알츠하이머, TUH 무관)
-- [ ] ④ BCI/MI 벤치마크 (운동 상상, TUH 무관)
+- [x] Linear Probing / Fine-tuning 평가 파이프라인 (DownstreamModel 구현 완료) (2026-03-30)
+- [x] ④ BCI IV 2a 벤치마크 구현 (2026-04-02)
+  - 데이터 로더 (MOABB → 200Hz, 2s 윈도우, CAR, 22ch)
+  - 평가 스크립트 (subject-dependent + cross-subject LOSO)
+  - Random init baseline: 25.9% (chance=25%, 정상)
+  - 데이터 크기: ~382MB, 9 subjects, 공개 접근
+- [ ] ① TUAB 벤치마크 — 보류 (DUA 접근 어려움)
+- [ ] ② TDBrain 벤치마크 — DUA 신청 필요 (26ch, 파킨슨, ~120GB)
+- [ ] ③ APAVA 벤치마크 (알츠하이머, 16ch, 23 subjects, 공개 OSF)
 - [ ] Ablation Study 설계 및 실행
 
 ## 5. 논문 작성
