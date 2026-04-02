@@ -19,6 +19,7 @@ import torch.nn as nn
 import wandb
 import yaml
 from torch.utils.data import DataLoader
+from huggingface_hub import HfApi
 
 from src.model.eeg_jepa import EEGJEPA
 from src.preprocessing.dataset import make_dummy_dataset
@@ -130,7 +131,7 @@ def train_one_epoch(
             global_step += 1
 
             # Log to wandb every step
-            wandb.log({
+            log_dict = {
                 "train/loss": output["loss"].item(),
                 "train/pred_loss": output["pred_loss"].item(),
                 "train/sigreg_loss": output["sigreg_loss"].item(),
@@ -140,7 +141,28 @@ def train_one_epoch(
                 "train/epoch": epoch,
                 "train/batch_max_channels": batch["num_channels"].max().item(),
                 "train/batch_mean_channels": batch["num_channels"].float().mean().item(),
-            }, step=global_step)
+                # SIGReg diagnostics
+                "diag/emb_mean_var": output["emb_mean_var"].item(),
+                "diag/emb_min_var": output["emb_min_var"].item(),
+                "diag/mean_abs_corr": output["mean_abs_corr"].item(),
+                "diag/actual_mask_ratio": output["actual_mask_ratio"].item(),
+                # Throughput
+                "perf/samples_per_sec": batch["eeg"].shape[0] / max(time.time() - t_start, 1e-6) * (step + 1),
+            }
+            # Per-component grad norms (every 10 steps to reduce overhead)
+            if global_step % 10 == 0:
+                for comp_name, comp_module in [
+                    ("encoder", model.encoder),
+                    ("predictor", model.predictor),
+                    ("channel_mixer", model.channel_mixer),
+                    ("projector", model.projector),
+                ]:
+                    comp_grad = torch.nn.utils.clip_grad_norm_(
+                        comp_module.parameters(), float("inf")
+                    )
+                    log_dict[f"grad/{comp_name}"] = comp_grad.item()
+
+            wandb.log(log_dict, step=global_step)
 
         total_loss += output["loss"].item()
         total_pred += output["pred_loss"].item()
@@ -228,6 +250,14 @@ def main():
     parser.add_argument(
         "--no-wandb", action="store_true",
         help="Disable wandb logging",
+    )
+    parser.add_argument(
+        "--hf-model-repo", type=str, default=None,
+        help="HuggingFace model repo for checkpoint uploads (e.g. fbdeme/eeg-wm-jepa)",
+    )
+    parser.add_argument(
+        "--keep-local-ckpts", type=int, default=3,
+        help="Number of recent local checkpoints to keep (older ones deleted after HF upload)",
     )
     args = parser.parse_args()
 
@@ -327,13 +357,18 @@ def main():
         elapsed = time.time() - t_epoch
 
         # Epoch-level logging
-        wandb.log({
+        epoch_log = {
             "epoch/loss": metrics["loss"],
             "epoch/pred_loss": metrics["pred_loss"],
             "epoch/sigreg_loss": metrics["sigreg_loss"],
             "epoch/query_loss": metrics["query_loss"],
             "epoch/duration_sec": elapsed,
-        }, step=global_step)
+        }
+        if device.type == "cuda":
+            epoch_log["perf/gpu_mem_allocated_gb"] = torch.cuda.max_memory_allocated() / 1e9
+            epoch_log["perf/gpu_mem_reserved_gb"] = torch.cuda.max_memory_reserved() / 1e9
+            torch.cuda.reset_peak_memory_stats()
+        wandb.log(epoch_log, step=global_step)
 
         print(
             f"  Epoch {epoch} done in {elapsed:.0f}s — "
@@ -344,9 +379,9 @@ def main():
 
         # Save checkpoint
         if (epoch + 1) % save_interval == 0 or epoch == epochs - 1:
+            ckpt_path = ckpt_dir / f"epoch_{epoch:04d}.pt"
             save_checkpoint(
-                model, optimizer, scheduler, epoch, metrics,
-                ckpt_dir / f"epoch_{epoch:04d}.pt",
+                model, optimizer, scheduler, epoch, metrics, ckpt_path,
             )
             # Log checkpoint as wandb artifact
             if not args.no_wandb:
@@ -355,8 +390,34 @@ def main():
                     type="model",
                     metadata=metrics,
                 )
-                artifact.add_file(str(ckpt_dir / f"epoch_{epoch:04d}.pt"))
+                artifact.add_file(str(ckpt_path))
                 wandb.log_artifact(artifact)
+
+            # Upload to HF model repo
+            if args.hf_model_repo:
+                try:
+                    hf_api = HfApi()
+                    hf_api.create_repo(
+                        args.hf_model_repo, repo_type="model",
+                        private=False, exist_ok=True,
+                    )
+                    run_name = wandb.run.name if wandb.run else "local"
+                    hf_api.upload_file(
+                        path_or_fileobj=str(ckpt_path),
+                        path_in_repo=f"checkpoints/{run_name}/epoch_{epoch:04d}.pt",
+                        repo_id=args.hf_model_repo,
+                        repo_type="model",
+                    )
+                    print(f"  Uploaded to HF: {args.hf_model_repo}")
+                except Exception as e:
+                    print(f"  HF upload failed: {e}")
+
+            # Keep only recent local checkpoints to save disk
+            existing = sorted(ckpt_dir.glob("epoch_*.pt"))
+            if len(existing) > args.keep_local_ckpts:
+                for old_ckpt in existing[:-args.keep_local_ckpts]:
+                    old_ckpt.unlink()
+                    print(f"  Deleted old local checkpoint: {old_ckpt.name}")
 
     print("\nTraining complete!")
     wandb.finish()

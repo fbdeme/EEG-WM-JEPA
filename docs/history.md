@@ -147,3 +147,6 @@
 | 2026-04-01 | Mask block 0.5~1.0초 유지 확정 | spatiotemporal 마스킹과의 균형 | 변경 없음 |
 | 2026-04-01 | 논문 Introduction + Related Work 초안 | 40+ 논문 인용 검증 포함 | paper/main.md |
 | 2026-04-02 | REVE 전처리 81/322 완료, 서버 이관 결정 | 422GB 서버에서 OOM+디스크 부족 3회 실패 | 4TB SSD 서버에서 재개 예정 |
+| 2026-04-02 | wandb 로깅 확장 (SIGReg 내부통계, 컴포넌트별 grad, throughput, GPU 메모리) | 하이퍼파라미터 분석 커버리지 강화 | eeg_jepa.py + main.py 갱신 |
+| 2026-04-02 | 체크포인트 HF public repo 업로드 + 로컬 3개 유지 | 서버 디스크 절약, 실험 간 모델 공유 | main.py 갱신 |
+| 2026-04-02 | HF 스트리밍 사전학습 파이프라인 검증 완료 | 835 shards로 5 step 테스트: loss 72→36, 정상 수렴 | 전처리 완료 후 바로 학습 가능 |

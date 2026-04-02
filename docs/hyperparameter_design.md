@@ -214,23 +214,39 @@ Pred/Enc 비율:   1.75 (LeWM ~2.0 근사)
 
 ## 로깅 체계
 
-wandb 기반 실시간 모니터링 구축 완료:
+wandb 기반 실시간 모니터링 구축 완료 (2026-04-02 확장):
 
 **매 Step 기록:**
 - `train/loss`, `train/pred_loss`, `train/sigreg_loss`, `train/query_loss`
 - `train/grad_norm`, `train/lr`
 - `train/batch_max_channels`, `train/batch_mean_channels`
+- `diag/emb_mean_var`, `diag/emb_min_var` — SIGReg 내부: embedding 분산 (min_var→0이면 collapse 징후)
+- `diag/mean_abs_corr` — SIGReg 내부: 차원 간 평균 상관 (→0이면 등방성 달성)
+- `diag/actual_mask_ratio` — 실제 마스킹 비율 (설정 60%와 비교)
+- `perf/samples_per_sec` — 학습 throughput
+
+**매 10 Step 기록:**
+- `grad/encoder`, `grad/predictor`, `grad/channel_mixer`, `grad/projector` — 컴포넌트별 grad norm (Pred/Enc 비율 설계 검증)
 
 **매 Epoch 기록:**
 - `epoch/loss`, `epoch/pred_loss`, `epoch/sigreg_loss`, `epoch/query_loss`
 - `epoch/duration_sec`
+- `perf/gpu_mem_allocated_gb`, `perf/gpu_mem_reserved_gb`
 
 **체크포인트:**
-- 5 epoch마다 저장 + wandb Artifact 업로드
+- 5 epoch마다 저장
+- wandb Artifact 업로드
+- HF public model repo 업로드 (`checkpoints/{run_name}/epoch_XXXX.pt` 구조)
+- 로컬은 최신 3개만 유지 (디스크 절약)
+- 실험 마무리 후 HF repo에 best 모델만 남기고 정리
 
 **분석 관점:**
 - pred_loss 하강 추이 → 모델이 latent prediction을 학습하고 있는지
 - sigreg_loss 안정성 → collapse 없이 representation이 분산되는지
+- emb_min_var → collapse 조기 경보 (loss보다 민감)
+- mean_abs_corr → 등방성 가우시안 달성 여부
 - query_loss → 쿼리들이 서로 다른 뇌 영역을 담당하는지
+- grad/encoder vs grad/predictor → Predictor가 encoder를 압도하지 않는지
 - grad_norm → 학습 안정성, 폭발/소실 감지
 - batch channel 통계 → 데이터 다양성 모니터링
+- actual_mask_ratio → spatiotemporal masking이 설정대로 작동하는지

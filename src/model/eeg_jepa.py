@@ -252,9 +252,32 @@ class EEGJEPA(nn.Module):
             + self.lambda_query * query_loss
         )
 
+        # Compute diagnostics (detached, no grad overhead)
+        with torch.no_grad():
+            # SIGReg internals: per-dimension variance and mean correlation
+            flat = projected.detach().reshape(-1, projected.shape[-1])  # [B*N, D]
+            emb_var = flat.var(dim=0)  # [D]
+            emb_mean_var = emb_var.mean()
+            emb_min_var = emb_var.min()
+            # Correlation: off-diagonal of correlation matrix
+            centered = flat - flat.mean(dim=0, keepdim=True)
+            std = centered.std(dim=0, keepdim=True).clamp(min=1e-8)
+            normed = centered / std
+            corr = (normed.T @ normed) / normed.shape[0]  # [D, D]
+            off_diag = corr - torch.eye(corr.shape[0], device=corr.device)
+            mean_abs_corr = off_diag.abs().mean()
+
+            # Actual mask ratio
+            actual_mask_ratio = mask.float().mean()
+
         return {
             "loss": loss,
             "pred_loss": pred_loss,
             "sigreg_loss": sigreg_loss,
             "query_loss": query_loss,
+            # Diagnostics
+            "emb_mean_var": emb_mean_var,
+            "emb_min_var": emb_min_var,
+            "mean_abs_corr": mean_abs_corr,
+            "actual_mask_ratio": actual_mask_ratio,
         }
