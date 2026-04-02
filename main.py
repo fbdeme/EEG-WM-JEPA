@@ -27,6 +27,7 @@ from src.preprocessing.streaming_dataset import (
     StreamingEEGDataset,
     eeg_collate_fn,
 )
+from src.preprocessing.mds_dataset import MDSEEGDataset
 
 
 def build_optimizer(model: nn.Module, cfg: dict) -> torch.optim.Optimizer:
@@ -54,7 +55,8 @@ def build_scheduler(
 
 
 def build_dataloader(
-    cfg: dict, hf_repo: str | None, dummy: bool
+    cfg: dict, hf_repo: str | None, mds_remote: str | None,
+    mds_cache_limit: str | None, dummy: bool,
 ) -> DataLoader:
     if dummy:
         dataset = make_dummy_dataset(
@@ -70,6 +72,26 @@ def build_dataloader(
             drop_last=True,
         )
 
+    batch_size = cfg["training"]["batch_size"]
+
+    if mds_remote:
+        # MosaicML Streaming (recommended for large datasets)
+        dataset = MDSEEGDataset(
+            remote=mds_remote,
+            cache_limit=mds_cache_limit,
+            shuffle=True,
+            batch_size=batch_size,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            collate_fn=eeg_collate_fn,
+            num_workers=4,
+            pin_memory=True,
+            drop_last=True,
+        )
+
+    # Fallback: HF streaming (slow, for testing only)
     dataset = StreamingEEGDataset(
         hf_repo=hf_repo,
         split="train",
@@ -77,7 +99,7 @@ def build_dataloader(
     )
     return DataLoader(
         dataset,
-        batch_size=cfg["training"]["batch_size"],
+        batch_size=batch_size,
         collate_fn=eeg_collate_fn,
         num_workers=2,
         prefetch_factor=4,
@@ -225,7 +247,15 @@ def main():
     )
     parser.add_argument(
         "--hf-repo", type=str, default=None,
-        help="HuggingFace dataset repo for streaming",
+        help="HuggingFace dataset repo for HF streaming (slow, fallback)",
+    )
+    parser.add_argument(
+        "--mds-remote", type=str, default=None,
+        help="MDS remote path for MosaicML Streaming (e.g. hf://user/repo/train)",
+    )
+    parser.add_argument(
+        "--mds-cache-limit", type=str, default="50gb",
+        help="Max local cache for MDS streaming (e.g. '50gb')",
     )
     parser.add_argument(
         "--dummy", action="store_true",
@@ -261,8 +291,8 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.dummy and not args.hf_repo:
-        parser.error("Either --hf-repo or --dummy is required")
+    if not args.dummy and not args.hf_repo and not args.mds_remote:
+        parser.error("One of --mds-remote, --hf-repo, or --dummy is required")
 
     # Load config
     with open(args.config) as f:
@@ -315,7 +345,9 @@ def main():
         wandb.init(mode="disabled")
 
     # Build training infrastructure
-    loader = build_dataloader(cfg, args.hf_repo, args.dummy)
+    loader = build_dataloader(
+        cfg, args.hf_repo, args.mds_remote, args.mds_cache_limit, args.dummy,
+    )
     steps_per_epoch = 500 if not args.dummy else len(loader)
     optimizer = build_optimizer(model, cfg)
     scheduler = build_scheduler(optimizer, cfg, steps_per_epoch)

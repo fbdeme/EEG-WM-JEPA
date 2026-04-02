@@ -16,4 +16,5 @@ dependencies = [
     "transformers",
     "tqdm",
     "wandb>=0.25.1",
+    "mosaicml-streaming>=0.13.0",
 ]

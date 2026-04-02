@@ -61,9 +61,12 @@
   - idx 81-93: 완료 (191 shards)
   - idx 94-322: 미처리 (228 recordings 남음, ~3.6TB raw)
   - ⚠️ 현재 서버(422GB SSD)에서 OOM + 디스크 부족으로 3회 실패 → 4TB SSD 서버로 이관 예정
-- [ ] 더블버퍼 데이터 로더 구현 (HF 8 병렬 DL + 로컬 버퍼 교체, 디스크 60GB만 사용) (2026-04-02)
-- [ ] HP 튜닝 (로컬 300GB 부분 데이터, 10-20 epoch/실험, 실험당 2-4시간)
-- [ ] Best config로 full 데이터 사전학습 실행 (더블버퍼, 50-100 epoch, ~5-10일)
+- [x] MosaicML Streaming 도입 결정 (커스텀 더블버퍼 대체) (2026-04-02)
+  - MDSEEGDataset 구현 완료, 로컬 MDS 테스트: 0.234s/step (HF 스트리밍 대비 6.6x 빠름)
+  - `cache_limit` 설정으로 LRU 캐시 eviction → 디스크 제한 서버에서 full 데이터 학습 가능
+- [ ] Parquet → MDS 포맷 변환 (전처리 서버에서 실행 예정, `hf://fbdeme/reve-mds/train`으로 업로드)
+- [ ] HP 튜닝 (10-20 epoch/실험, 실험당 2-4시간)
+- [ ] Best config로 full 데이터 사전학습 실행 (MDS streaming, 50-100 epoch, ~5-10일)
 
 ## 4. 구현 - Stage 3: 다운스트림 평가
 

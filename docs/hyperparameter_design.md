@@ -264,18 +264,20 @@ wandb 기반 실시간 모니터링 구축 완료 (2026-04-02 확장):
 
 → HF 스트리밍은 GPU 가동률 15%. 로컬 디스크 필요하나 full 데이터 ~2.5TB > 서버 422GB.
 
-### 더블버퍼 데이터 로더 (채택)
+### MosaicML Streaming (채택, 커스텀 더블버퍼 대체)
 
-```
-[다운로드 스레드 8개] → [버퍼 A: 30GB] → [GPU 학습]
-                        [버퍼 B: 30GB] ← (학습 끝나면 삭제)
+```python
+dataset = MDSEEGDataset(
+    remote="hf://fbdeme/reve-mds/train",
+    cache_limit="50gb",  # LRU eviction
+)
 ```
 
-- 버퍼 A 학습 중 → 8 스레드가 버퍼 B를 병렬 다운로드
-- 버퍼 A 학습 완료 → 삭제, 버퍼 B로 전환
-- 8 병렬 DL 속도 (1.8s/shard) < GPU 학습 속도 (2.6s/shard) → **GPU가 병목 = GPU 100% 활용**
-- 디스크 사용: ~60GB (버퍼 2개)
-- 로컬 2.5TB 저장과 학습 시간 동일 (GPU가 병목이므로)
+- MDS 포맷: 랜덤 액세스 최적화된 바이너리 shard (Parquet에서 변환 필요)
+- `cache_limit`: 로컬 디스크 사용량 상한, 초과 시 LRU 삭제
+- `hf://` 프로토콜로 HuggingFace Hub 네이티브 지원
+- 내장 prefetch, shuffle, multi-worker 지원
+- 커스텀 구현 대비: 검증된 오픈소스, MPT-7B/30B 학습에 실사용
 
 ### 학습 계획
 
